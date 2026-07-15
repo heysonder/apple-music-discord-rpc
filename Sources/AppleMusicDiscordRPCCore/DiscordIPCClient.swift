@@ -12,6 +12,7 @@ public final class DiscordIPCClient: DiscordPresenceClient {
     private let environment: [String: String]
     private let fileManager: FileManager
     private let logger: Logger
+    private let now: () -> Date
 
     private var connection: DiscordIPCConnection?
     private var reconnectDelay: TimeInterval = 1
@@ -22,13 +23,15 @@ public final class DiscordIPCClient: DiscordPresenceClient {
         processID: Int32 = getpid(),
         environment: [String: String] = ProcessInfo.processInfo.environment,
         fileManager: FileManager = .default,
-        logger: Logger = .quiet
+        logger: Logger = .quiet,
+        now: @escaping () -> Date = Date.init
     ) {
         self.appID = appID
         self.processID = processID
         self.environment = environment
         self.fileManager = fileManager
         self.logger = logger
+        self.now = now
     }
 
     public func setActivity(_ activity: DiscordActivity) throws {
@@ -91,6 +94,9 @@ public final class DiscordIPCClient: DiscordPresenceClient {
             let response = try connection.readFrame()
             try validateCommandResponse(response, nonce: nonce)
             resetBackoff()
+        } catch DiscordIPCError.reconnectBackoff(let remaining) {
+            // No connection attempt happened, so the backoff window must not grow.
+            throw DiscordIPCError.reconnectBackoff(remaining)
         } catch {
             closeConnection()
             scheduleReconnect()
@@ -103,7 +109,7 @@ public final class DiscordIPCClient: DiscordPresenceClient {
             return connection
         }
 
-        let now = Date()
+        let now = self.now()
         guard now >= nextReconnectAttempt else {
             throw DiscordIPCError.reconnectBackoff(nextReconnectAttempt.timeIntervalSince(now))
         }
@@ -192,7 +198,7 @@ public final class DiscordIPCClient: DiscordPresenceClient {
     }
 
     private func scheduleReconnect() {
-        nextReconnectAttempt = Date().addingTimeInterval(reconnectDelay)
+        nextReconnectAttempt = now().addingTimeInterval(reconnectDelay)
         reconnectDelay = min(reconnectDelay * 2, 30)
     }
 
