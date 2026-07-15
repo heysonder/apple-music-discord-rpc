@@ -104,10 +104,6 @@ public struct MusicSnapshot: Equatable {
         )
     }
 
-    public func withArtworkURL(_ artworkURL: URL?) -> MusicSnapshot {
-        withArtworkURLs(albumArtworkURL: artworkURL, artistImageURL: artistImageURL)
-    }
-
     public func withArtworkURLs(albumArtworkURL: URL?, artistImageURL: URL?) -> MusicSnapshot {
         MusicSnapshot(
             trackID: trackID,
