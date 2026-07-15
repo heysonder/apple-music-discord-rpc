@@ -140,7 +140,7 @@ public final class MusicBrainzCoverArtResolver: AlbumArtworkResolver {
 
     private static func luceneEscaped(_ value: String) -> String {
         value
-            .replacingOccurrences(of: #"\"#, with: #"\\\\"#)
+            .replacingOccurrences(of: #"\"#, with: #"\\"#)
             .replacingOccurrences(of: #"""#, with: #"\""#)
     }
 

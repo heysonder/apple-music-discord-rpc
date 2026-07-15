@@ -95,6 +95,19 @@ struct AlbumArtworkResolverTests {
     }
 
     @Test
+    func escapesLuceneCharactersInMusicBrainzQuery() throws {
+        let request = try #require(
+            MusicBrainzCoverArtResolver.searchRequest(
+                for: snapshot(title: #"Back\slash "Quote""#, artist: "beabadoobee", album: "")
+            ))
+        let requestURL = try #require(request.url)
+        let components = try #require(URLComponents(url: requestURL, resolvingAgainstBaseURL: false))
+        let query = components.queryItems?.first { $0.name == "query" }?.value
+
+        #expect(query == #"recording:"Back\\slash \"Quote\"" AND artist:"beabadoobee""#)
+    }
+
+    @Test
     func picksBestArtworkMatchAndExpandsImageSize() throws {
         let data = Data(
             """
