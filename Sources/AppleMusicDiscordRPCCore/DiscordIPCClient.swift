@@ -91,8 +91,7 @@ public final class DiscordIPCClient: DiscordPresenceClient {
         do {
             let connection = try ensureConnection()
             try connection.writeFrame(opcode: .frame, payload: payload)
-            let response = try connection.readFrame()
-            try validateCommandResponse(response, nonce: nonce)
+            try readCommandResponse(from: connection, nonce: nonce)
             resetBackoff()
         } catch DiscordIPCError.reconnectBackoff(let remaining) {
             // No connection attempt happened, so the backoff window must not grow.
@@ -153,25 +152,29 @@ public final class DiscordIPCClient: DiscordPresenceClient {
         throw DiscordIPCError.invalidFrame("Expected READY event from Discord IPC.")
     }
 
-    private func validateCommandResponse(_ frame: DiscordIPCFrame, nonce: String) throws {
-        if frame.opcode == .ping {
-            guard let connection else {
-                throw DiscordIPCError.disconnected
+    private func readCommandResponse(from connection: DiscordIPCConnection, nonce: String) throws {
+        for _ in 0..<32 {
+            let frame = try connection.readFrame()
+            if frame.opcode == .ping {
+                try connection.writeFrame(opcode: .pong, payload: frame.payload)
+                continue
             }
-            try connection.writeFrame(opcode: .pong, payload: frame.payload)
-            let response = try connection.readFrame()
-            try validateCommandResponse(response, nonce: nonce)
+            try validateCommandResponse(frame, nonce: nonce)
             return
         }
+        throw DiscordIPCError.invalidFrame("Too many Discord IPC pings without a command response.")
+    }
 
+    func validateCommandResponse(_ frame: DiscordIPCFrame, nonce: String) throws {
         let response = try decodeFramePayload(frame, expectedDescription: "command response frame")
 
         if response.event == .error {
             throw DiscordIPCError.discordError(response.errorMessage)
         }
 
-        if let responseNonce = response.nonce, responseNonce != nonce {
-            throw DiscordIPCError.invalidFrame("Discord response nonce did not match request nonce.")
+        if response.nonce != nonce || response.cmd != "SET_ACTIVITY" || response.evt != nil {
+            throw DiscordIPCError.invalidFrame(
+                "Discord response did not acknowledge the requested activity command.")
         }
     }
 
@@ -188,7 +191,8 @@ public final class DiscordIPCClient: DiscordPresenceClient {
         do {
             return try JSONDecoder().decode(DiscordRPCResponse.self, from: frame.payload)
         } catch {
-            throw DiscordIPCError.invalidFrame("\(expectedDescription) payload is not a valid Discord RPC response.")
+            throw DiscordIPCError.invalidFrame(
+                "\(expectedDescription) payload is not a valid Discord RPC response.")
         }
     }
 
@@ -209,6 +213,7 @@ public final class DiscordIPCClient: DiscordPresenceClient {
 }
 
 private struct DiscordRPCResponse: Decodable {
+    let cmd: String?
     let evt: String?
     let nonce: String?
     let data: DiscordRPCResponseData?

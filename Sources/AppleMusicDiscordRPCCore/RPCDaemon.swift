@@ -1,3 +1,4 @@
+import CoreFoundation
 import Foundation
 
 public final class AppleMusicDiscordRPCDaemon {
@@ -6,6 +7,7 @@ public final class AppleMusicDiscordRPCDaemon {
     private let pollInterval: TimeInterval
     private let logger: Logger
     private var deduplicator: PresenceUpdateDeduplicator
+    private var lastUpdateError: String?
 
     public init(
         musicClient: MusicSnapshotProvider,
@@ -36,15 +38,24 @@ public final class AppleMusicDiscordRPCDaemon {
             do {
                 try clear()
             } catch {
-                logger.log("Failed to clear Discord Rich Presence on exit: \(error.localizedDescription)")
+                logger.error("Failed to clear Discord Rich Presence on exit: \(error.localizedDescription)")
             }
         }
 
         while !shouldStop() {
-            do {
-                try updateOnce()
-            } catch {
-                logger.log("Update failed: \(error.localizedDescription)")
+            autoreleasepool {
+                do {
+                    try updateOnce()
+                    lastUpdateError = nil
+                } catch DiscordIPCError.reconnectBackoff {
+                    // The original failure is already logged; wait for the retry window.
+                } catch {
+                    let message = error.localizedDescription
+                    if message != lastUpdateError {
+                        logger.error("Update failed: \(message)")
+                        lastUpdateError = message
+                    }
+                }
             }
 
             sleepRespectingStop(shouldStop: shouldStop)
@@ -75,7 +86,15 @@ public final class AppleMusicDiscordRPCDaemon {
     private func sleepRespectingStop(shouldStop: () -> Bool) {
         let deadline = Date().addingTimeInterval(pollInterval)
         while !shouldStop(), Date() < deadline {
-            Thread.sleep(forTimeInterval: min(0.25, max(0, deadline.timeIntervalSinceNow)))
+            let interval = min(1, max(0, deadline.timeIntervalSinceNow))
+            autoreleasepool {
+                // AppKit refreshes running-application state on the main run loop.
+                // Sleeping alone leaves Music launch/quit information stale.
+                let result = CFRunLoopRunInMode(.defaultMode, interval, false)
+                if result == .finished {
+                    Thread.sleep(forTimeInterval: interval)
+                }
+            }
         }
     }
 }

@@ -4,6 +4,15 @@ import Testing
 
 @Suite
 struct CommandLineOptionsTests {
+    @Test(arguments: ["inf", "infinity", "1e309", "nan"])
+    func rejectsNonFinitePollIntervals(value: String) {
+        #expect(throws: CLIError.invalidPollInterval(value)) {
+            try CommandLineOptions.parse(
+                arguments: ["--app-id", "123", "--poll-interval", value], environment: [:]
+            )
+        }
+    }
+
     @Test
     func parsesAppIDFromEnvironment() throws {
         let options = try CommandLineOptions.parse(

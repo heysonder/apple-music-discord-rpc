@@ -46,7 +46,7 @@ public struct CommandLineOptions: Equatable {
                 appID = try cursor.requiredValue(after: argument).trimmed
             case "--poll-interval":
                 let value = try cursor.requiredValue(after: argument)
-                guard let parsed = TimeInterval(value), parsed > 0 else {
+                guard let parsed = TimeInterval(value), parsed.isFinite, parsed > 0 else {
                     throw CLIError.invalidPollInterval(value)
                 }
                 pollInterval = parsed

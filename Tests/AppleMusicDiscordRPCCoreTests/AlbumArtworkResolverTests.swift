@@ -6,6 +6,44 @@ import Testing
 @Suite
 struct AlbumArtworkResolverTests {
     @Test
+    func rejectsAppleArtworkForSameTitleByDifferentArtist() throws {
+        let data = Data(
+            #"{"results":[{"trackName":"Song Name","artistName":"Unrelated Performer","collectionName":"Album Name","artworkUrl100":"https://example.com/wrong.jpg"}]}"#
+                .utf8)
+        #expect(try ITunesSearchArtworkResolver.bestArtworkURL(from: data, for: snapshot()) == nil)
+    }
+
+    @Test
+    func rejectsDeezerArtworkForSameTitleByDifferentArtist() throws {
+        let data = Data(
+            #"{"data":[{"title":"Song Name","artist":{"name":"Unrelated Performer"},"album":{"title":"Album Name","cover_xl":"https://example.com/wrong.jpg"}}]}"#
+                .utf8)
+        #expect(try DeezerTrackArtworkResolver.bestArtworkURL(from: data, for: snapshot()) == nil)
+    }
+
+    @Test
+    func doesNotPublishTrackThatPausedDuringArtworkLookup() throws {
+        let provider = ChangingMusicProvider(snapshots: [snapshot(), nil])
+        let enriched = ArtworkEnrichingMusicSnapshotProvider(
+            baseProvider: provider,
+            artworkResolver: StubArtworkResolver(url: URL(string: "https://example.com/cover.jpg"))
+        )
+        #expect(try enriched.currentSnapshot(at: Date()) == nil)
+    }
+
+    @Test
+    func doesNotAttachOldArtworkAfterTrackChangesDuringLookup() throws {
+        let provider = ChangingMusicProvider(snapshots: [snapshot(), snapshot(title: "Next Song")])
+        let enriched = ArtworkEnrichingMusicSnapshotProvider(
+            baseProvider: provider,
+            artworkResolver: StubArtworkResolver(url: URL(string: "https://example.com/old.jpg"))
+        )
+        let result = try #require(try enriched.currentSnapshot(at: Date()))
+        #expect(result.title == "Next Song")
+        #expect(result.artworkURL == nil)
+    }
+
+    @Test
     func buildsITunesSearchRequest() throws {
         let request = try #require(
             ITunesSearchArtworkResolver.searchRequest(
@@ -137,7 +175,8 @@ struct AlbumArtworkResolverTests {
             ))
 
         #expect(
-            url.absoluteString == "https://is1-ssl.mzstatic.com/image/thumb/Music112/v4/match/source/1024x1024bb.jpg")
+            url.absoluteString
+                == "https://is1-ssl.mzstatic.com/image/thumb/Music112/v4/match/source/1024x1024bb.jpg")
     }
 
     @Test
@@ -172,7 +211,9 @@ struct AlbumArtworkResolverTests {
                 for: snapshot(title: "Sun Has Set", artist: "beabadoobee", album: "")
             ))
 
-        #expect(url.absoluteString == "https://e-cdns-images.dzcdn.net/images/cover/match/1000x1000-000000-80-0-0.jpg")
+        #expect(
+            url.absoluteString
+                == "https://e-cdns-images.dzcdn.net/images/cover/match/1000x1000-000000-80-0-0.jpg")
     }
 
     @Test
@@ -199,7 +240,9 @@ struct AlbumArtworkResolverTests {
                 for: snapshot(title: "Sun Has Set", artist: "beabadoobee", album: "")
             ))
 
-        #expect(url.absoluteString == "https://e-cdns-images.dzcdn.net/images/artist/match/1000x1000-000000-80-0-0.jpg")
+        #expect(
+            url.absoluteString
+                == "https://e-cdns-images.dzcdn.net/images/artist/match/1000x1000-000000-80-0-0.jpg")
     }
 
     @Test
@@ -298,8 +341,10 @@ struct AlbumArtworkResolverTests {
             artistImageResolver: artistResolver
         )
 
-        let first = try #require(try enrichedProvider.currentSnapshot(at: Date(timeIntervalSince1970: 100)))
-        let second = try #require(try enrichedProvider.currentSnapshot(at: Date(timeIntervalSince1970: 101)))
+        let first = try #require(
+            try enrichedProvider.currentSnapshot(at: Date(timeIntervalSince1970: 100)))
+        let second = try #require(
+            try enrichedProvider.currentSnapshot(at: Date(timeIntervalSince1970: 101)))
 
         #expect(first.artworkURL?.absoluteString == "https://example.com/cover.jpg")
         #expect(first.artistImageURL?.absoluteString == "https://example.com/artist.jpg")
@@ -392,5 +437,15 @@ private final class StubArtistImageResolver: ArtistImageResolver {
     func artistImageURL(for snapshot: MusicSnapshot) -> URL? {
         callCount += 1
         return url
+    }
+}
+
+private final class ChangingMusicProvider: MusicSnapshotProvider {
+    private var snapshots: [MusicSnapshot?]
+
+    init(snapshots: [MusicSnapshot?]) { self.snapshots = snapshots }
+
+    func currentSnapshot(at date: Date) throws -> MusicSnapshot? {
+        snapshots.removeFirst()
     }
 }

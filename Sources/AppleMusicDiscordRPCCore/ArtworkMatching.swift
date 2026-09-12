@@ -17,6 +17,7 @@ struct ArtworkSearchTarget {
 struct TrackArtworkMatch {
     let score: Int
     let titleMatched: Bool
+    let artistMatched: Bool
     let artworkURL: URL
 
     init?(
@@ -54,6 +55,7 @@ struct TrackArtworkMatch {
 
         score = titleScore + artistScore + albumScore
         titleMatched = titleScore > 0
+        artistMatched = artistScore > 0
         self.artworkURL = artworkURL
     }
 }

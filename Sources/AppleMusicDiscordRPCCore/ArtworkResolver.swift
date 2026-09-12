@@ -55,22 +55,29 @@ public final class ArtworkEnrichingMusicSnapshotProvider: MusicSnapshotProvider 
             return nil
         }
 
-        return snapshot.withArtworkURLs(
-            albumArtworkURL: albumArtworkCache.value(for: ArtworkCacheKey(snapshot: snapshot)) {
-                artworkResolver.artworkURL(for: snapshot)
-            },
-            artistImageURL: resolvedArtistImage(for: snapshot)
-        )
-    }
-
-    private func resolvedArtistImage(for snapshot: MusicSnapshot) -> URL? {
-        guard let artistImageResolver else {
-            return nil
+        var didResolve = false
+        let albumURL = albumArtworkCache.value(for: ArtworkCacheKey(snapshot: snapshot), at: date) {
+            didResolve = true
+            return artworkResolver.artworkURL(for: snapshot)
+        }
+        let artistURL = artistImageCache.value(for: ArtistImageCacheKey(snapshot: snapshot), at: date) {
+            guard let artistImageResolver else { return nil }
+            didResolve = true
+            return artistImageResolver.artistImageURL(for: snapshot)
         }
 
-        return artistImageCache.value(for: ArtistImageCacheKey(snapshot: snapshot)) {
-            artistImageResolver.artistImageURL(for: snapshot)
+        // Network lookups can outlast a pause or track change. Never publish stale music.
+        let current: MusicSnapshot
+        if didResolve {
+            guard let refreshed = try baseProvider.currentSnapshot(at: Date()) else { return nil }
+            guard ArtworkCacheKey(snapshot: refreshed) == ArtworkCacheKey(snapshot: snapshot) else {
+                return refreshed
+            }
+            current = refreshed
+        } else {
+            current = snapshot
         }
+        return current.withArtworkURLs(albumArtworkURL: albumURL, artistImageURL: artistURL)
     }
 }
 
@@ -96,16 +103,40 @@ private struct ArtistImageCacheKey: Hashable {
     }
 }
 
-private struct ResolutionCache<Key: Hashable, Value> {
-    private var storage: [Key: Value?] = [:]
+// Bounded URL metadata only. Misses expire so a temporary outage is recoverable.
+struct ResolutionCache<Key: Hashable, Value> {
+    private struct Entry {
+        let value: Value?
+        let expiresAt: Date
+    }
 
-    mutating func value(for key: Key, resolve: () -> Value?) -> Value? {
-        if case .some(let cachedValue) = storage[key] {
-            return cachedValue
+    private let capacity: Int
+    private let missLifetime: TimeInterval
+    private var storage: [Key: Entry] = [:]
+    private var insertionOrder: [Key] = []
+
+    init(capacity: Int = 256, missLifetime: TimeInterval = 300) {
+        precondition(capacity > 0)
+        self.capacity = capacity
+        self.missLifetime = missLifetime
+    }
+
+    mutating func value(for key: Key, at date: Date, resolve: () -> Value?) -> Value? {
+        if let entry = storage[key], date < entry.expiresAt {
+            return entry.value
         }
 
         let resolvedValue = resolve()
-        storage.updateValue(resolvedValue, forKey: key)
+        if storage[key] != nil {
+            insertionOrder.removeAll { $0 == key }
+        } else if storage.count >= capacity {
+            storage.removeValue(forKey: insertionOrder.removeFirst())
+        }
+        insertionOrder.append(key)
+        storage[key] = Entry(
+            value: resolvedValue,
+            expiresAt: resolvedValue == nil ? date.addingTimeInterval(missLifetime) : .distantFuture
+        )
         return resolvedValue
     }
 }

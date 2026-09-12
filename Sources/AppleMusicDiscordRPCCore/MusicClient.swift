@@ -7,6 +7,7 @@ public protocol MusicSnapshotProvider {
 
 public final class AppleScriptMusicClient: MusicSnapshotProvider {
     private let bundleIdentifier = "com.apple.Music"
+    private let script = NSAppleScript(source: scriptSource)
 
     public init() {}
 
@@ -16,11 +17,12 @@ public final class AppleScriptMusicClient: MusicSnapshotProvider {
     }
 
     private func rawSnapshot() throws -> RawMusicSnapshot {
-        guard !NSRunningApplication.runningApplications(withBundleIdentifier: bundleIdentifier).isEmpty else {
+        guard !NSRunningApplication.runningApplications(withBundleIdentifier: bundleIdentifier).isEmpty
+        else {
             return RawMusicSnapshot(appIsRunning: false)
         }
 
-        guard let script = NSAppleScript(source: Self.scriptSource) else {
+        guard let script else {
             throw MusicClientError.scriptInitializationFailed
         }
 
@@ -56,6 +58,7 @@ public final class AppleScriptMusicClient: MusicSnapshotProvider {
     }
 
     private static let scriptSource = """
+        with timeout of 5 seconds
         tell application id "com.apple.Music"
             set trackName to ""
             set trackArtist to ""
@@ -81,6 +84,7 @@ public final class AppleScriptMusicClient: MusicSnapshotProvider {
 
             return {(player state as text), trackName, trackArtist, trackAlbum, trackDurationMilliseconds, trackPositionMilliseconds, trackPersistentID}
         end tell
+        end timeout
         """
 }
 

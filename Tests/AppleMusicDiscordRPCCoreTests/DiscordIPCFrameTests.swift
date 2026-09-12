@@ -6,6 +6,14 @@ import Testing
 @Suite
 struct DiscordIPCFrameTests {
     @Test
+    func rejectsOversizedPayloadBeforeAllocation() {
+        let header = Data([1, 0, 0, 0, 255, 255, 255, 255])
+        #expect(throws: DiscordIPCError.self) {
+            try DiscordIPCFrameCoder.readHeader(header)
+        }
+    }
+
+    @Test
     func frameEncodingUsesLittleEndianHeader() throws {
         let payload = Data("{}".utf8)
         let encoded = DiscordIPCFrameCoder.encode(opcode: .handshake, payload: payload)

@@ -6,6 +6,18 @@ import Testing
 @Suite
 struct RPCDaemonTests {
     @Test
+    func processesRunLoopEventsBetweenPolls() {
+        let fired = TimerFlag()
+        let timer = Timer(timeInterval: 0.01, repeats: false) { _ in fired.markFired() }
+        RunLoop.current.add(timer, forMode: .default)
+        defer { timer.invalidate() }
+        let daemon = makeDaemon(snapshot: nil, discordClient: SpyDiscordClient())
+        let deadline = Date().addingTimeInterval(0.1)
+        daemon.runUntilStopped { fired.hasFired || Date() >= deadline }
+        #expect(fired.hasFired)
+    }
+
+    @Test
     func runOnceSetsActivityForPlayingTrack() throws {
         let discordClient = SpyDiscordClient()
         let daemon = makeDaemon(snapshot: snapshot(), discordClient: discordClient)
@@ -133,4 +145,11 @@ private final class SpyDiscordClient: DiscordPresenceClient {
     func clearActivity() throws {
         clearCount += 1
     }
+}
+
+private final class TimerFlag: @unchecked Sendable {
+    private let lock = NSLock()
+    private var fired = false
+    var hasFired: Bool { lock.withLock { fired } }
+    func markFired() { lock.withLock { fired = true } }
 }

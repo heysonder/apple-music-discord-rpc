@@ -20,6 +20,7 @@ public struct DiscordIPCFrame: Equatable {
 
 public enum DiscordIPCFrameCoder {
     public static let headerLength = 8
+    public static let maximumPayloadLength = 1_048_576
 
     public static func encode(opcode: DiscordOpcode, payload: Data) -> Data {
         var data = Data()
@@ -34,18 +35,12 @@ public enum DiscordIPCFrameCoder {
             throw DiscordIPCError.invalidFrame("Frame is shorter than the 8-byte Discord IPC header.")
         }
 
-        let bytes = [UInt8](data)
-        let opcodeValue = readLittleEndianUInt32(bytes[0..<4])
-        let payloadLength = Int(readLittleEndianUInt32(bytes[4..<8]))
+        let (opcode, payloadLength) = try readHeader(Data(data.prefix(headerLength)))
         let expectedLength = headerLength + payloadLength
 
         guard data.count == expectedLength else {
             throw DiscordIPCError.invalidFrame(
                 "Frame length \(data.count) does not match header length \(expectedLength).")
-        }
-
-        guard let opcode = DiscordOpcode(rawValue: opcodeValue) else {
-            throw DiscordIPCError.invalidFrame("Unknown Discord IPC opcode \(opcodeValue).")
         }
 
         return DiscordIPCFrame(opcode: opcode, payload: data.subdata(in: headerLength..<data.count))
@@ -62,7 +57,11 @@ public enum DiscordIPCFrameCoder {
             throw DiscordIPCError.invalidFrame("Unknown Discord IPC opcode \(opcodeValue).")
         }
 
-        return (opcode, Int(readLittleEndianUInt32(bytes[4..<8])))
+        let payloadLength = Int(readLittleEndianUInt32(bytes[4..<8]))
+        guard payloadLength <= maximumPayloadLength else {
+            throw DiscordIPCError.invalidFrame("Discord IPC payload exceeds the 1 MiB limit.")
+        }
+        return (opcode, payloadLength)
     }
 
     private static func readLittleEndianUInt32(_ bytes: ArraySlice<UInt8>) -> UInt32 {

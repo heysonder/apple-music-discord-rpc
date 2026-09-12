@@ -14,7 +14,11 @@ public struct Logger: Sendable {
             return
         }
 
-        FileHandle.standardError.writeLine(message)
+        error(message)
+    }
+
+    public func error(_ message: String) {
+        FileHandle.standardError.writeLine("[\(Date().formatted(.iso8601))] \(message)")
     }
 }
 

@@ -5,6 +5,32 @@ import Testing
 
 @Suite
 struct DiscordIPCClientTests {
+    @Test(arguments: [
+        #"{"evt":"READY"}"#,
+        #"{"cmd":"SET_ACTIVITY"}"#,
+        #"{"cmd":"SET_ACTIVITY","nonce":"wrong"}"#,
+        #"{"cmd":"DISPATCH","nonce":"expected","evt":"READY"}"#,
+    ])
+    func rejectsFramesThatDoNotAcknowledgeTheActivity(json: String) {
+        let client = DiscordIPCClient(appID: "123")
+        #expect(throws: DiscordIPCError.self) {
+            try client.validateCommandResponse(
+                DiscordIPCFrame(opcode: .frame, payload: Data(json.utf8)), nonce: "expected"
+            )
+        }
+    }
+
+    @Test
+    func acceptsMatchingActivityAcknowledgement() throws {
+        let client = DiscordIPCClient(appID: "123")
+        try client.validateCommandResponse(
+            DiscordIPCFrame(
+                opcode: .frame,
+                payload: Data(#"{"cmd":"SET_ACTIVITY","nonce":"expected","evt":null}"#.utf8)
+            ), nonce: "expected"
+        )
+    }
+
     @Test
     func buildsOrderedSocketPathsFromUniqueRuntimeDirectories() {
         let paths = DiscordIPCClient.candidateSocketPaths(

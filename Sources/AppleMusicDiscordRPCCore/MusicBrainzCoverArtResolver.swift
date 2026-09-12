@@ -31,8 +31,9 @@ public final class MusicBrainzCoverArtResolver: AlbumArtworkResolver {
             let searchData = try musicBrainzData(for: searchRequest)
             let candidates = try Self.releaseGroupCandidates(from: searchData, for: snapshot)
 
-            for candidate in candidates {
-                guard let coverArtRequest = Self.coverArtRequest(releaseGroupID: candidate.releaseGroupID) else {
+            for candidate in candidates.prefix(3) {
+                guard let coverArtRequest = Self.coverArtRequest(releaseGroupID: candidate.releaseGroupID)
+                else {
                     continue
                 }
 
@@ -84,7 +85,8 @@ public final class MusicBrainzCoverArtResolver: AlbumArtworkResolver {
     }
 
     static func coverArtRequest(releaseGroupID: String) -> URLRequest? {
-        guard let url = URL(string: "https://coverartarchive.org/release-group/\(releaseGroupID)") else {
+        guard let url = URL(string: "https://coverartarchive.org/release-group/\(releaseGroupID)")
+        else {
             return nil
         }
 
@@ -182,7 +184,8 @@ private struct MusicBrainzRecordingSearchResponse: Decodable {
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        recordings = try container.decodeIfPresent([MusicBrainzRecording].self, forKey: .recordings) ?? []
+        recordings =
+            try container.decodeIfPresent([MusicBrainzRecording].self, forKey: .recordings) ?? []
     }
 }
 
@@ -213,7 +216,8 @@ private struct MusicBrainzRecording: Decodable {
         score = try container.decodeFlexibleIntIfPresent(forKey: .score) ?? 0
         title = try container.decodeIfPresent(String.self, forKey: .title) ?? ""
         lengthMilliseconds = try container.decodeFlexibleIntIfPresent(forKey: .lengthMilliseconds)
-        artistCredits = try container.decodeIfPresent([MusicBrainzArtistCredit].self, forKey: .artistCredits) ?? []
+        artistCredits =
+            try container.decodeIfPresent([MusicBrainzArtistCredit].self, forKey: .artistCredits) ?? []
         releases = try container.decodeIfPresent([MusicBrainzRelease].self, forKey: .releases) ?? []
     }
 }
@@ -246,7 +250,8 @@ private struct MusicBrainzRelease: Decodable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         title = try container.decodeIfPresent(String.self, forKey: .title) ?? ""
         status = try container.decodeIfPresent(String.self, forKey: .status) ?? ""
-        releaseGroup = try container.decodeIfPresent(MusicBrainzReleaseGroup.self, forKey: .releaseGroup)
+        releaseGroup = try container.decodeIfPresent(
+            MusicBrainzReleaseGroup.self, forKey: .releaseGroup)
     }
 }
 
@@ -323,7 +328,8 @@ private struct MusicBrainzRecordingMatch {
 
             return MusicBrainzReleaseGroupCandidate(
                 releaseGroupID: releaseGroup.id,
-                score: titleScore + artistScore + albumScore + durationScore + searchScore + statusScore + typeScore
+                score: titleScore + artistScore + albumScore + durationScore + searchScore + statusScore
+                    + typeScore
             )
         }
     }

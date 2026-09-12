@@ -123,7 +123,10 @@ $verbose_argument
     <true/>
 
     <key>KeepAlive</key>
-    <false/>
+    <true/>
+
+    <key>ThrottleInterval</key>
+    <integer>30</integer>
 
     <key>ProcessType</key>
     <string>Background</string>
@@ -146,9 +149,22 @@ PLIST
 chmod 644 "$plist_path"
 plutil -lint "$plist_path" >/dev/null
 
-launchctl bootstrap "$user_domain" "$plist_path"
 launchctl enable "$user_domain/$label"
-launchctl kickstart -k "$user_domain/$label"
+
+# bootout can return before the old process has finished shutting down.
+# Bootstrap starts the new process via RunAtLoad; do not kill it with kickstart -k.
+started=0
+for attempt in {1..10}; do
+    if launchctl bootstrap "$user_domain" "$plist_path"; then
+        started=1
+        break
+    fi
+    sleep 1
+done
+if [[ "$started" != "1" ]]; then
+    echo "Could not load $label. Check the LaunchAgent and logs above." >&2
+    exit 1
+fi
 
 cat <<DONE
 Installed and started $label.

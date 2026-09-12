@@ -64,7 +64,7 @@ public final class DeezerTrackArtworkResolver: AlbumArtworkResolver {
                     target: target
                 )
             }
-            .filter { $0.score >= minimumMatchScore && $0.titleMatched }
+            .filter { $0.score >= minimumMatchScore && $0.titleMatched && $0.artistMatched }
             .max { $0.score < $1.score }?
             .artworkURL
     }
